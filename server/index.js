@@ -398,21 +398,60 @@ async function notifyOnNewIncidents(prevCache, nextCache) {
 async function notifyOnNewIncidentsByEmail(prevCache, nextCache) {
   if (!emailTransporter || subscriberEmails.size === 0) return;
 
-  const previousIds = new Set(flattenIncidents(prevCache).map((item) => item.id));
+  const previousMap = new Map();
+  flattenIncidents(prevCache).forEach((incident) => {
+    if (incident.id) {
+      previousMap.set(incident.id, incident);
+    }
+  });
+
   const nextIncidents = flattenIncidents(nextCache);
-  const newIncidents = nextIncidents.filter(
-    (item) => item.id && !previousIds.has(item.id) && !sentIncidentIds.has(item.id)
-  );
+  const newIncidents = [];
+  const statusChanges = [];
 
-  if (newIncidents.length === 0) return;
+  nextIncidents.forEach((incident) => {
+    if (!incident.id) return;
 
-  const summary = buildIncidentLines(newIncidents.slice(0, 8));
+    const prev = previousMap.get(incident.id);
+    if (!prev && !sentIncidentIds.has(incident.id)) {
+      // Brand new incident
+      newIncidents.push(incident);
+    } else if (prev && prev.status !== incident.status) {
+      // Status changed
+      statusChanges.push({
+        ...incident,
+        previousStatus: prev.status
+      });
+    }
+  });
+
+  if (newIncidents.length === 0 && statusChanges.length === 0) return;
+
+  let emailBody = "";
+
+  if (newIncidents.length > 0) {
+    emailBody += "New Incidents:\n";
+    emailBody += buildIncidentLines(newIncidents.slice(0, 5));
+    emailBody += "\n\n";
+  }
+
+  if (statusChanges.length > 0) {
+    emailBody += "Status Changes:\n";
+    emailBody += statusChanges
+      .slice(0, 5)
+      .map(
+        (incident) =>
+          `• ${incident.provider}: ${incident.title} (${incident.previousStatus} → ${incident.status}) ${incident.link || ""}`
+      )
+      .join("\n");
+  }
+
   await emailTransporter.sendMail({
     from: EMAIL_FROM,
     to: EMAIL_FROM,
     bcc: Array.from(subscriberEmails),
-    subject: "New cloud incident updates",
-    text: `New incident updates:\n${summary}`
+    subject: "Cloud incident updates",
+    text: emailBody.trim()
   });
 }
 
