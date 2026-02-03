@@ -28,6 +28,8 @@ The UI runs on port 5173. The proxy server runs on port 5174.
 ## API
 
 - `GET /api/incidents` returns cached incidents grouped by provider
+- `GET /api/incidents/history?days=7&provider=Azure&status=resolved&severity=critical&limit=100` returns historical incidents from database
+  - Query params: `days` (1-90), `provider`, `status`, `severity`, `limit` (max 500)
 - `GET /api/health` basic health check
 
 ## Notifications (Discord / Teams)
