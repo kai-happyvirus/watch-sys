@@ -40,6 +40,12 @@ const FEEDS = [
     provider: "Azure",
     name: "Azure DevOps Status",
     url: "https://status.dev.azure.com/_rss"
+  },
+  {
+    id: "aws-status",
+    provider: "AWS",
+    name: "AWS Service Health Dashboard",
+    url: "https://status.aws.amazon.com/rss/all.rss"
   }
 ];
 
