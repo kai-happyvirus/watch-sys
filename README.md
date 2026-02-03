@@ -2,6 +2,8 @@
 
 Simple, intuitive status dashboard that aggregates incident updates. The Node proxy polls Azure RSS feeds every five minutes and exposes a JSON API used by the React UI.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
 ## What's included
 
 - React + Vite frontend
