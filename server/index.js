@@ -276,6 +276,51 @@ app.get("/api/incidents", async (_req, res) => {
   }
 });
 
+app.get("/api/incidents/history", async (req, res) => {
+  if (!pool) {
+    return res.status(503).json({ 
+      incidents: [], 
+      error: "Database not available" 
+    });
+  }
+
+  try {
+    const days = Math.max(1, Math.min(90, parseInt(req.query.days) || 7));
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit) || 200));
+    const severity = req.query.severity;
+
+    let query = `
+      SELECT 
+        id, provider, source, title, summary, status, severity, link,
+        published_at, first_seen_at, last_updated_at
+      FROM incidents
+      WHERE published_at >= NOW() - INTERVAL '${days} days'
+    `;
+
+    const params = [];
+    if (severity && ['critical', 'high', 'medium', 'low'].includes(severity)) {
+      query += ` AND severity = $1`;
+      params.push(severity);
+    }
+
+    query += ` ORDER BY published_at DESC LIMIT ${limit}`;
+
+    const result = await pool.query(query, params);
+    
+    res.json({ 
+      incidents: result.rows,
+      days,
+      count: result.rows.length
+    });
+  } catch (error) {
+    console.error("Failed to load history:", error);
+    res.status(500).json({ 
+      incidents: [], 
+      error: error?.message || "Failed to load history" 
+    });
+  }
+});
+
 app.get("/api/subscriptions/email", (_req, res) => {
   res.json({ count: subscriberEmails.size });
 });
