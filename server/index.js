@@ -26,7 +26,10 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const pool = DATABASE_URL
   ? new Pool({
       connectionString: DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 30000,
+      max: 10
     })
   : null;
 
@@ -242,8 +245,9 @@ async function refreshCache() {
 
 async function getCache() {
   const isStale = Date.now() - cache.updatedAt > CACHE_TTL_MS;
-  if (isStale) {
-    await refreshCache();
+  if (isStale && !refreshInFlight) {
+    // Trigger refresh but don't wait for it if it might timeout
+    refreshCache().catch(() => null);
   }
   return cache;
 }
@@ -452,13 +456,16 @@ async function saveIncidentsToDatabase(cacheSnapshot) {
   const allIncidents = flattenIncidents(cacheSnapshot);
   if (allIncidents.length === 0) return;
 
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+    
     for (const incident of allIncidents) {
       if (!incident.id) continue;
 
       const publishedAt = incident.publishedAt ? new Date(incident.publishedAt) : null;
 
-      await pool.query(
+      await client.query(
         `INSERT INTO incidents (
           id, provider, source, title, summary, status, severity, link, published_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -483,8 +490,13 @@ async function saveIncidentsToDatabase(cacheSnapshot) {
         ]
       );
     }
+    
+    await client.query('COMMIT');
   } catch (error) {
+    await client.query('ROLLBACK');
     console.warn("Failed to save incidents to database", error);
+  } finally {
+    client.release();
   }
 }
 
