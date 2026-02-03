@@ -113,8 +113,7 @@ function App() {
           <p className="eyebrow">Cloud service status</p>
           <h1>Watch Sys</h1>
           <p className="subtext">
-            Near real-time incidents from Azure feeds. AWS, GCP, and social
-            sources can be enabled later.
+            Near real-time incidents from Azure, AWS, and GCP. Social sources can be added with API keys.
           </p>
         </div>
         <div className="header-actions">

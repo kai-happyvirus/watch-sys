@@ -1,6 +1,6 @@
 # Watch Sys
 
-Simple, intuitive status dashboard that aggregates incident updates. The Node proxy polls Azure RSS feeds every five minutes and exposes a JSON API used by the React UI.
+Simple, intuitive status dashboard that aggregates incident updates from Azure, AWS, and GCP. The Node proxy polls RSS feeds every five minutes and exposes a JSON API used by the React UI.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
 
@@ -8,8 +8,8 @@ Simple, intuitive status dashboard that aggregates incident updates. The Node pr
 
 - React + Vite frontend
 - Node + Express RSS proxy
-- Azure status feeds wired in
-- Optional placeholders for AWS, GCP, and social sources
+- Azure, AWS, and GCP status feeds
+- Optional social sources (X, Reddit) require API keys
 
 ## Run locally
 
