@@ -76,6 +76,70 @@
   justify-content: space-between;
 }
 
+.email-subscribe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-radius: 16px;
+  border: 1px solid #1f2a44;
+  background: #0f172a;
+}
+
+.email-subscribe h2 {
+  margin: 0 0 6px;
+  color: #e2e8f0;
+  font-size: 18px;
+}
+
+.email-subscribe p {
+  margin: 0;
+  color: #9fb0cd;
+  font-size: 14px;
+}
+
+.email-subscribe form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.email-subscribe input {
+  min-width: 220px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #223152;
+  background: #0b1120;
+  color: #e2e8f0;
+}
+
+.email-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.button.secondary {
+  background: transparent;
+  border: 1px solid #2b3a5d;
+  color: #cbd5f5;
+}
+
+.email-status {
+  font-size: 12px;
+  color: #a0aec0;
+}
+
+.email-status.success {
+  color: #4ade80;
+}
+
+.email-status.error {
+  color: #f87171;
+}
+
 .controls input {
   flex: 1;
   min-width: 220px;

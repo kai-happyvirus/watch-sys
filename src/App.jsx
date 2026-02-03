@@ -14,6 +14,8 @@ function App() {
   const [data, setData] = useState({ providers: [], errors: [], updatedAt: 0 });
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [emailStatus, setEmailStatus] = useState({ state: "idle", message: "" });
 
   const loadIncidents = async () => {
     try {
@@ -39,6 +41,29 @@ function App() {
     const timer = setInterval(loadIncidents, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, []);
+
+  const submitEmail = async (method) => {
+    setEmailStatus({ state: "loading", message: "" });
+    try {
+      const response = await fetch("/api/subscriptions/email", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.message || "Request failed");
+      }
+
+      setEmailStatus({
+        state: "success",
+        message: method === "POST" ? "Subscribed!" : "Unsubscribed."
+      });
+    } catch (error) {
+      setEmailStatus({ state: "error", message: error?.message || "Failed" });
+    }
+  };
 
   const filteredProviders = useMemo(() => {
     if (!query.trim()) return data.providers || [];
@@ -83,6 +108,45 @@ function App() {
           onChange={(event) => setQuery(event.target.value)}
         />
         <span className="pill">Polling every 1 minute</span>
+      </section>
+
+      <section className="email-subscribe">
+        <div>
+          <h2>Email alerts</h2>
+          <p>Subscribe to receive incident updates by email.</p>
+        </div>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitEmail("POST");
+          }}
+        >
+          <input
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+          <div className="email-actions">
+            <button className="button" type="submit" disabled={emailStatus.state === "loading"}>
+              Subscribe
+            </button>
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => submitEmail("DELETE")}
+              disabled={emailStatus.state === "loading"}
+            >
+              Unsubscribe
+            </button>
+          </div>
+          {emailStatus.state !== "idle" ? (
+            <span className={`email-status ${emailStatus.state}`}>
+              {emailStatus.message}
+            </span>
+          ) : null}
+        </form>
       </section>
 
       {loading ? <div className="loading">Loading incidents...</div> : null}
