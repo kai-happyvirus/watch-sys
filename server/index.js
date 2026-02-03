@@ -79,7 +79,19 @@ let refreshInFlight = null;
 
 function normalizeStatus(title = "", content = "") {
   const text = `${title} ${content}`.toLowerCase();
-  if (text.includes("resolved") || text.includes("mitigated")) return "resolved";
+  
+  // Check for resolved/recovered states first
+  if (
+    text.includes("resolved") ||
+    text.includes("mitigated") ||
+    text.includes("restored") ||
+    text.includes("stabilized") ||
+    text.includes("recovering") ||
+    text.includes("recovery complete")
+  ) {
+    return "resolved";
+  }
+  
   if (text.includes("investigating")) return "investigating";
   if (text.includes("maintenance")) return "maintenance";
   if (text.includes("degrad") || text.includes("degradation")) return "degraded";
