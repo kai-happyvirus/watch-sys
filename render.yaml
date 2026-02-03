@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: watch-sys
+    env: node
+    plan: free
+    buildCommand: npm install && npm --prefix server install && npm run build
+    startCommand: npm --prefix server run start
+    autoDeploy: true
+    healthCheckPath: /api/health

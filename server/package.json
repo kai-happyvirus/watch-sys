@@ -1,0 +1,15 @@
+{
+  "name": "watch-sys-server",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "node index.js",
+    "start": "NODE_ENV=production node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "rss-parser": "^3.13.0"
+  }
+}
