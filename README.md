@@ -48,6 +48,7 @@ Set environment variables on your host:
 - `EMAIL_SMTP_USER=your_gmail@gmail.com`
 - `EMAIL_SMTP_PASS=app_password`
 - `EMAIL_FROM=your_gmail@gmail.com` (optional)
+- `DATABASE_URL=postgresql://...` (required for persistent subscribers)
 
 Endpoints:
 
@@ -55,7 +56,10 @@ Endpoints:
 - `DELETE /api/subscriptions/email` with JSON `{ "email": "user@example.com" }`
 - `GET /api/subscriptions/email` returns `{ "count": number }`
 
-Note: Render free instances have ephemeral disks; for persistent subscribers, use a database.
+**PostgreSQL setup on Render:**
+1. Create a PostgreSQL database (free tier)
+2. Copy the Internal Database URL
+3. Add as `DATABASE_URL` environment variable to your web service
 
 ## Deploy (easy & free)
 

@@ -2,9 +2,11 @@ import express from "express";
 import cors from "cors";
 import Parser from "rss-parser";
 import nodemailer from "nodemailer";
+import pg from "pg";
 import path from "path";
 import { fileURLToPath } from "url";
-import { readFile, writeFile } from "fs/promises";
+
+const { Pool } = pg;
 
 const app = express();
 const PORT = process.env.PORT || 5174;
@@ -19,7 +21,14 @@ const ENABLE_EMAIL_NOTIFICATIONS = process.env.ENABLE_EMAIL_NOTIFICATIONS === "t
 const EMAIL_SMTP_USER = process.env.EMAIL_SMTP_USER || "";
 const EMAIL_SMTP_PASS = process.env.EMAIL_SMTP_PASS || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || EMAIL_SMTP_USER;
-const SUBSCRIBERS_FILE = path.resolve(__dirname, "subscribers.json");
+const DATABASE_URL = process.env.DATABASE_URL;
+
+const pool = DATABASE_URL
+  ? new Pool({
+      connectionString: DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    })
+  : null;
 
 const parser = new Parser({
   timeout: 15000,
@@ -272,8 +281,7 @@ app.post("/api/subscriptions/email", async (req, res) => {
     return;
   }
 
-  subscriberEmails.add(email);
-  await persistSubscribers();
+  await addSubscriber(email);
   res.status(201).json({ email, subscribed: true });
 });
 
@@ -284,8 +292,7 @@ app.delete("/api/subscriptions/email", async (req, res) => {
     return;
   }
 
-  subscriberEmails.delete(email);
-  await persistSubscribers();
+  await removeSubscriber(email);
   res.json({ email, subscribed: false });
 });
 
@@ -300,6 +307,8 @@ refreshCache().catch(() => null);
 setInterval(() => {
   refreshCache().catch(() => null);
 }, CACHE_TTL_MS);
+
+initDatabase().then(() => loadSubscribers());
 
 app.listen(PORT, () => {
   console.log(`Status proxy running on port ${PORT}`);
@@ -331,23 +340,57 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-async function loadSubscribers() {
+async function initDatabase() {
+  if (!pool) return;
   try {
-    const raw = await readFile(SUBSCRIBERS_FILE, "utf8");
-    const list = JSON.parse(raw);
-    if (Array.isArray(list)) {
-      list.filter(isValidEmail).forEach((email) => subscriberEmails.add(email));
-    }
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS subscribers (
+        email VARCHAR(255) PRIMARY KEY,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log("Database initialized");
   } catch (error) {
-    if (error?.code !== "ENOENT") {
-      console.warn("Failed to load subscribers", error);
-    }
+    console.error("Database initialization failed:", error);
   }
 }
 
-async function persistSubscribers() {
-  const list = Array.from(subscriberEmails);
-  await writeFile(SUBSCRIBERS_FILE, JSON.stringify(list, null, 2));
+async function loadSubscribers() {
+  if (!pool) return;
+  try {
+    const result = await pool.query("SELECT email FROM subscribers");
+    result.rows.forEach((row) => {
+      if (isValidEmail(row.email)) {
+        subscriberEmails.add(row.email);
+      }
+    });
+    console.log(`Loaded ${subscriberEmails.size} subscribers`);
+  } catch (error) {
+    console.warn("Failed to load subscribers", error);
+  }
+}
+
+async function addSubscriber(email) {
+  subscriberEmails.add(email);
+  if (!pool) return;
+  try {
+    await pool.query(
+      "INSERT INTO subscribers (email) VALUES ($1) ON CONFLICT (email) DO NOTHING",
+      [email]
+    );
+  } catch (error) {
+    console.warn("Failed to persist subscriber", error);
+  }
+}
+
+async function removeSubscriber(email) {
+  subscriberEmails.delete(email);
+  if (!pool) return;
+  try {
+    await pool.query("DELETE FROM subscribers WHERE email = $1", [email]);
+  } catch (error) {
+    console.warn("Failed to remove subscriber", error);
+  }
 }
 
 async function notifyOnNewIncidents(prevCache, nextCache) {
