@@ -1,8 +1,10 @@
 import express from "express";
 import cors from "cors";
 import Parser from "rss-parser";
+import nodemailer from "nodemailer";
 import path from "path";
 import { fileURLToPath } from "url";
+import { readFile, writeFile } from "fs/promises";
 
 const app = express();
 const PORT = process.env.PORT || 5174;
@@ -10,6 +12,14 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const clientDistPath = path.resolve(__dirname, "..", "dist");
+const ENABLE_NOTIFICATIONS = process.env.ENABLE_NOTIFICATIONS === "true";
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
+const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || "";
+const ENABLE_EMAIL_NOTIFICATIONS = process.env.ENABLE_EMAIL_NOTIFICATIONS === "true";
+const EMAIL_SMTP_USER = process.env.EMAIL_SMTP_USER || "";
+const EMAIL_SMTP_PASS = process.env.EMAIL_SMTP_PASS || "";
+const EMAIL_FROM = process.env.EMAIL_FROM || EMAIL_SMTP_USER;
+const SUBSCRIBERS_FILE = path.resolve(__dirname, "subscribers.json");
 
 const parser = new Parser({
   timeout: 15000,
@@ -38,6 +48,20 @@ let cache = {
   providers: [],
   errors: []
 };
+
+const sentIncidentIds = new Set();
+const MAX_SENT_IDS = 500;
+const subscriberEmails = new Set();
+const emailTransporter =
+  ENABLE_EMAIL_NOTIFICATIONS && EMAIL_SMTP_USER && EMAIL_SMTP_PASS
+    ? nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: EMAIL_SMTP_USER,
+          pass: EMAIL_SMTP_PASS
+        }
+      })
+    : null;
 
 let refreshInFlight = null;
 
@@ -112,11 +136,21 @@ async function refreshCache() {
       };
     });
 
-    cache = {
+    const nextCache = {
       updatedAt: Date.now(),
       providers,
       errors
     };
+
+    if (ENABLE_NOTIFICATIONS) {
+      await notifyOnNewIncidents(cache, nextCache);
+    }
+
+    if (ENABLE_EMAIL_NOTIFICATIONS) {
+      await notifyOnNewIncidentsByEmail(cache, nextCache);
+    }
+
+    cache = nextCache;
 
     refreshInFlight = null;
     return cache;
@@ -134,6 +168,7 @@ async function getCache() {
 }
 
 app.use(cors());
+app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", updatedAt: cache.updatedAt });
@@ -156,6 +191,34 @@ app.get("/api/incidents", async (_req, res) => {
   }
 });
 
+app.get("/api/subscriptions/email", (_req, res) => {
+  res.json({ count: subscriberEmails.size });
+});
+
+app.post("/api/subscriptions/email", async (req, res) => {
+  const email = (req.body?.email || "").toLowerCase().trim();
+  if (!isValidEmail(email)) {
+    res.status(400).json({ message: "Invalid email address" });
+    return;
+  }
+
+  subscriberEmails.add(email);
+  await persistSubscribers();
+  res.status(201).json({ email, subscribed: true });
+});
+
+app.delete("/api/subscriptions/email", async (req, res) => {
+  const email = (req.body?.email || "").toLowerCase().trim();
+  if (!isValidEmail(email)) {
+    res.status(400).json({ message: "Invalid email address" });
+    return;
+  }
+
+  subscriberEmails.delete(email);
+  await persistSubscribers();
+  res.json({ email, subscribed: false });
+});
+
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(clientDistPath));
   app.get("*", (_req, res) => {
@@ -171,3 +234,116 @@ setInterval(() => {
 app.listen(PORT, () => {
   console.log(`Status proxy running on port ${PORT}`);
 });
+
+function flattenIncidents(snapshot) {
+  return (snapshot.providers || []).flatMap((provider) => provider.incidents || []);
+}
+
+function rememberIncident(id) {
+  if (!id) return;
+  sentIncidentIds.add(id);
+  if (sentIncidentIds.size > MAX_SENT_IDS) {
+    const [first] = sentIncidentIds;
+    sentIncidentIds.delete(first);
+  }
+}
+
+function buildIncidentLines(incidents) {
+  return incidents
+    .map(
+      (incident) =>
+        `• ${incident.provider}: ${incident.title} (${incident.status}) ${incident.link || ""}`
+    )
+    .join("\n");
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+async function loadSubscribers() {
+  try {
+    const raw = await readFile(SUBSCRIBERS_FILE, "utf8");
+    const list = JSON.parse(raw);
+    if (Array.isArray(list)) {
+      list.filter(isValidEmail).forEach((email) => subscriberEmails.add(email));
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      console.warn("Failed to load subscribers", error);
+    }
+  }
+}
+
+async function persistSubscribers() {
+  const list = Array.from(subscriberEmails);
+  await writeFile(SUBSCRIBERS_FILE, JSON.stringify(list, null, 2));
+}
+
+async function notifyOnNewIncidents(prevCache, nextCache) {
+  const previousIds = new Set(flattenIncidents(prevCache).map((item) => item.id));
+  const nextIncidents = flattenIncidents(nextCache);
+
+  const newIncidents = nextIncidents.filter(
+    (item) => item.id && !previousIds.has(item.id) && !sentIncidentIds.has(item.id)
+  );
+
+  if (newIncidents.length === 0) return;
+
+  newIncidents.forEach((incident) => rememberIncident(incident.id));
+
+  const batch = newIncidents.slice(0, 5);
+  const summary = buildIncidentLines(batch);
+
+  const tasks = [];
+  if (DISCORD_WEBHOOK_URL) {
+    tasks.push(
+      fetch(DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: `New incident updates:\n${summary}`
+        })
+      })
+    );
+  }
+
+  if (TEAMS_WEBHOOK_URL) {
+    tasks.push(
+      fetch(TEAMS_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: `New incident updates:\n${summary}`
+        })
+      })
+    );
+  }
+
+  if (tasks.length) {
+    await Promise.allSettled(tasks);
+  }
+}
+
+async function notifyOnNewIncidentsByEmail(prevCache, nextCache) {
+  if (!emailTransporter || subscriberEmails.size === 0) return;
+
+  const previousIds = new Set(flattenIncidents(prevCache).map((item) => item.id));
+  const nextIncidents = flattenIncidents(nextCache);
+  const newIncidents = nextIncidents.filter(
+    (item) => item.id && !previousIds.has(item.id) && !sentIncidentIds.has(item.id)
+  );
+
+  if (newIncidents.length === 0) return;
+
+  const summary = buildIncidentLines(newIncidents.slice(0, 8));
+  await emailTransporter.sendMail({
+    from: EMAIL_FROM,
+    to: EMAIL_FROM,
+    bcc: Array.from(subscriberEmails),
+    subject: "New cloud incident updates",
+    text: `New incident updates:\n${summary}`
+  });
+}
+
+loadSubscribers().catch(() => null);

@@ -30,6 +30,33 @@ The UI runs on port 5173. The proxy server runs on port 5174.
 - `GET /api/incidents` returns cached incidents grouped by provider
 - `GET /api/health` basic health check
 
+## Notifications (Discord / Teams)
+
+Set environment variables on your host:
+
+- `ENABLE_NOTIFICATIONS=true`
+- `DISCORD_WEBHOOK_URL=...` (optional)
+- `TEAMS_WEBHOOK_URL=...` (optional)
+
+When new incidents appear in the feeds, the server sends a short summary to the configured webhooks.
+
+## Email subscriptions (Gmail SMTP)
+
+Set environment variables on your host:
+
+- `ENABLE_EMAIL_NOTIFICATIONS=true`
+- `EMAIL_SMTP_USER=your_gmail@gmail.com`
+- `EMAIL_SMTP_PASS=app_password`
+- `EMAIL_FROM=your_gmail@gmail.com` (optional)
+
+Endpoints:
+
+- `POST /api/subscriptions/email` with JSON `{ "email": "user@example.com" }`
+- `DELETE /api/subscriptions/email` with JSON `{ "email": "user@example.com" }`
+- `GET /api/subscriptions/email` returns `{ "count": number }`
+
+Note: Render free instances have ephemeral disks; for persistent subscribers, use a database.
+
 ## Deploy (easy & free)
 
 Recommended: Render (free tier).
