@@ -5,7 +5,8 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "node index.js",
-    "start": "NODE_ENV=production node index.js"
+    "start": "NODE_ENV=production node index.js",
+    "migrate": "node migrate.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -16,7 +16,10 @@ Simple, intuitive status dashboard that aggregates incident updates from Azure, 
 1. Install dependencies:
 	- `npm install`
 	- `npm --prefix server install`
-2. Start UI + server together:
+2. Set up database (optional, for persistent storage):
+	- Set `DATABASE_URL` environment variable
+	- Run migrations: `npm --prefix server run migrate up`
+3. Start UI + server together:
 	- `npm run dev`
 
 The UI runs on port 5173. The proxy server runs on port 5174.

@@ -231,6 +231,8 @@ async function refreshCache() {
 
     cache = nextCache;
 
+    await saveIncidentsToDatabase(nextCache);
+
     refreshInFlight = null;
     return cache;
   })();
@@ -343,12 +345,63 @@ function isValidEmail(email) {
 async function initDatabase() {
   if (!pool) return;
   try {
+    // Create migrations table
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS subscribers (
-        email VARCHAR(255) PRIMARY KEY,
-        created_at TIMESTAMP DEFAULT NOW()
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        applied_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    
+    // Check if initial migration was run
+    const result = await pool.query(
+      "SELECT name FROM schema_migrations WHERE name = '001_initial_schema.js'"
+    );
+    
+    if (result.rows.length === 0) {
+      // Run initial migration inline for backwards compatibility
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS subscribers (
+          email VARCHAR(255) PRIMARY KEY,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS incidents (
+          id VARCHAR(500) PRIMARY KEY,
+          provider VARCHAR(50) NOT NULL,
+          source VARCHAR(100) NOT NULL,
+          title TEXT NOT NULL,
+          summary TEXT,
+          status VARCHAR(50) NOT NULL,
+          severity VARCHAR(20) NOT NULL,
+          link TEXT,
+          published_at TIMESTAMP,
+          first_seen_at TIMESTAMP DEFAULT NOW(),
+          last_updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_incidents_provider ON incidents(provider)
+      `);
+      
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_incidents_published_at ON incidents(published_at DESC)
+      `);
+      
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_incidents_severity ON incidents(severity)
+      `);
+      
+      // Mark initial migration as applied
+      await pool.query(
+        "INSERT INTO schema_migrations (name) VALUES ('001_initial_schema.js') ON CONFLICT DO NOTHING"
+      );
+    }
+    
     console.log("Database initialized");
   } catch (error) {
     console.error("Database initialization failed:", error);
@@ -390,6 +443,48 @@ async function removeSubscriber(email) {
     await pool.query("DELETE FROM subscribers WHERE email = $1", [email]);
   } catch (error) {
     console.warn("Failed to remove subscriber", error);
+  }
+}
+
+async function saveIncidentsToDatabase(cacheSnapshot) {
+  if (!pool) return;
+
+  const allIncidents = flattenIncidents(cacheSnapshot);
+  if (allIncidents.length === 0) return;
+
+  try {
+    for (const incident of allIncidents) {
+      if (!incident.id) continue;
+
+      const publishedAt = incident.publishedAt ? new Date(incident.publishedAt) : null;
+
+      await pool.query(
+        `INSERT INTO incidents (
+          id, provider, source, title, summary, status, severity, link, published_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (id) DO UPDATE SET
+          status = EXCLUDED.status,
+          severity = EXCLUDED.severity,
+          summary = EXCLUDED.summary,
+          last_updated_at = NOW()
+        WHERE incidents.status != EXCLUDED.status 
+           OR incidents.severity != EXCLUDED.severity
+           OR incidents.summary != EXCLUDED.summary`,
+        [
+          incident.id,
+          incident.provider,
+          incident.source,
+          incident.title,
+          incident.summary,
+          incident.status,
+          incident.severity,
+          incident.link,
+          publishedAt
+        ]
+      );
+    }
+  } catch (error) {
+    console.warn("Failed to save incidents to database", error);
   }
 }
 
