@@ -16,6 +16,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [emailStatus, setEmailStatus] = useState({ state: "idle", message: "" });
+  const [severityFilter, setSeverityFilter] = useState("all");
+  const [timeFilter, setTimeFilter] = useState("all");
 
   const loadIncidents = async () => {
     try {
@@ -66,18 +68,43 @@ function App() {
   };
 
   const filteredProviders = useMemo(() => {
-    if (!query.trim()) return data.providers || [];
+    if (!data.providers) return [];
+    
     const needle = query.toLowerCase();
-    return (data.providers || [])
+    const now = Date.now();
+    const timeFilters = {
+      "1h": 60 * 60 * 1000,
+      "24h": 24 * 60 * 60 * 1000,
+      "7d": 7 * 24 * 60 * 60 * 1000
+    };
+
+    return data.providers
       .map((provider) => ({
         ...provider,
         incidents: provider.incidents.filter((incident) => {
-          const haystack = `${incident.title || ""} ${incident.summary || ""}`.toLowerCase();
-          return haystack.includes(needle);
+          // Text search
+          if (needle) {
+            const haystack = `${incident.title || ""} ${incident.summary || ""}`.toLowerCase();
+            if (!haystack.includes(needle)) return false;
+          }
+
+          // Severity filter
+          if (severityFilter !== "all" && incident.severity !== severityFilter) {
+            return false;
+          }
+
+          // Time filter
+          if (timeFilter !== "all" && incident.publishedAt) {
+            const incidentTime = Date.parse(incident.publishedAt);
+            const cutoff = now - timeFilters[timeFilter];
+            if (incidentTime < cutoff) return false;
+          }
+
+          return true;
         })
       }))
       .filter((provider) => provider.incidents.length > 0);
-  }, [data.providers, query]);
+  }, [data.providers, query, severityFilter, timeFilter]);
 
   return (
     <div className="app">
@@ -107,6 +134,27 @@ function App() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
+        <div className="filters">
+          <select
+            value={severityFilter}
+            onChange={(event) => setSeverityFilter(event.target.value)}
+          >
+            <option value="all">All severities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <select
+            value={timeFilter}
+            onChange={(event) => setTimeFilter(event.target.value)}
+          >
+            <option value="all">All time</option>
+            <option value="1h">Last hour</option>
+            <option value="24h">Last 24 hours</option>
+            <option value="7d">Last 7 days</option>
+          </select>
+        </div>
         <span className="pill">Polling every 1 minute</span>
       </section>
 
@@ -177,9 +225,14 @@ function App() {
               {provider.incidents.map((incident) => (
                 <article className="card" key={incident.id}>
                   <div className="card-header">
-                    <span className={`status status-${incident.status}`}>
-                      {incident.status}
-                    </span>
+                    <div className="badges">
+                      <span className={`status status-${incident.status}`}>
+                        {incident.status}
+                      </span>
+                      <span className={`severity severity-${incident.severity}`}>
+                        {incident.severity}
+                      </span>
+                    </div>
                     <span className="source">{incident.source}</span>
                   </div>
                   <h3>{incident.title}</h3>

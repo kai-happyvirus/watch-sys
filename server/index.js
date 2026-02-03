@@ -75,9 +75,50 @@ function normalizeStatus(title = "", content = "") {
   return "info";
 }
 
+function detectSeverity(title = "", content = "") {
+  const text = `${title} ${content}`.toLowerCase();
+  
+  // Critical: outage, severe failures, complete unavailability
+  if (text.includes("outage") || text.includes("unavailable") || text.includes("complete failure")) {
+    return "critical";
+  }
+  
+  // High: failures affecting multiple regions/services, operation failures
+  if (
+    text.includes("failure") ||
+    text.includes("unable") ||
+    text.includes("major") ||
+    text.includes("multiple regions") ||
+    text.includes("dependent service") ||
+    (text.includes("region") && text.includes("impacted")) ||
+    text.match(/\b(east|west|north|south|central).*and.*(east|west|north|south|central)\b/)
+  ) {
+    return "high";
+  }
+  
+  // Medium: degraded performance, intermittent issues
+  if (
+    text.includes("degraded") ||
+    text.includes("intermittent") ||
+    text.includes("delays") ||
+    text.includes("elevated latency")
+  ) {
+    return "medium";
+  }
+  
+  // Low: informational, resolved, maintenance
+  return "low";
+}
+
+function getSeverityPriority(severity) {
+  const priorities = { critical: 0, high: 1, medium: 2, low: 3 };
+  return priorities[severity] ?? 999;
+}
+
 function mapItem(item, feed) {
   const summary = item.contentSnippet || item.content || "";
   const status = normalizeStatus(item.title, summary);
+  const severity = detectSeverity(item.title, summary);
 
   return {
     id: item.guid || item.link || `${feed.id}-${item.pubDate || item.isoDate || item.title}`,
@@ -86,6 +127,7 @@ function mapItem(item, feed) {
     title: item.title || "Untitled incident",
     summary,
     status,
+    severity,
     link: item.link,
     publishedAt: item.isoDate || item.pubDate || null
   };
@@ -125,6 +167,10 @@ async function refreshCache() {
 
     const providers = Array.from(providerMap.entries()).map(([provider, items]) => {
       const sorted = items.sort((a, b) => {
+        const aSeverity = getSeverityPriority(a.severity);
+        const bSeverity = getSeverityPriority(b.severity);
+        if (aSeverity !== bSeverity) return aSeverity - bSeverity;
+        
         const aTime = a.publishedAt ? Date.parse(a.publishedAt) : 0;
         const bTime = b.publishedAt ? Date.parse(b.publishedAt) : 0;
         return bTime - aTime;

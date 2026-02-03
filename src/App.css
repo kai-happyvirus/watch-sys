@@ -76,6 +76,30 @@
   justify-content: space-between;
 }
 
+.controls input {
+  flex: 1;
+  min-width: 220px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #223152;
+  background: #0b1120;
+  color: #e2e8f0;
+}
+
+.filters {
+  display: flex;
+  gap: 12px;
+}
+
+.filters select {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #223152;
+  background: #0b1120;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
 .email-subscribe {
   display: flex;
   flex-wrap: wrap;
@@ -226,6 +250,11 @@
   font-size: 12px;
 }
 
+.badges {
+  display: flex;
+  gap: 6px;
+}
+
 .status {
   text-transform: uppercase;
   padding: 4px 8px;
@@ -233,6 +262,35 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   font-size: 10px;
+}
+
+.severity {
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+.severity-critical {
+  background: rgba(220, 38, 38, 0.2);
+  color: #ef4444;
+}
+
+.severity-high {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fbbf24;
+}
+
+.severity-medium {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.severity-low {
+  background: rgba(148, 163, 184, 0.2);
+  color: #94a3b8;
 }
 
 .status-incident {
