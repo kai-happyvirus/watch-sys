@@ -46,6 +46,12 @@ const FEEDS = [
     provider: "AWS",
     name: "AWS Service Health Dashboard",
     url: "https://status.aws.amazon.com/rss/all.rss"
+  },
+  {
+    id: "gcp-status",
+    provider: "GCP",
+    name: "Google Cloud Status",
+    url: "https://status.cloud.google.com/en/feed.atom"
   }
 ];
 
